@@ -2,12 +2,16 @@
 
 A tiny flexbox-style layout engine that renders straight to a [Pillow](https://python-pillow.org/) image. It was built for e-ink picture frames, where you want CSS-like layout without a browser.
 
+![The bird frame's field-guide layout, rendered with picolay](docs/fieldguide-example.png)
+
+*The field-guide layout from an 800×480 bird-sighting e-ink frame, rendered with picolay.*
+
 The only dependency is Pillow. DejaVu Sans is bundled as the default font.
 
 ## Install
 
 ```bash
-pip install "picolay @ git+https://github.com/delps1001/picolay@v0.1.0"
+pip install "picolay @ git+https://github.com/delps1001/picolay@v0.1.1"
 ```
 
 ## Example
@@ -44,4 +48,8 @@ overlay = render(card, 200, 300, background=None)  # transparent RGBA
 uv run --extra dev pytest
 ```
 
-DejaVu Sans is distributed under the [DejaVu Fonts license](https://dejavu-fonts.github.io/License.html).
+## License
+
+picolay is released into the public domain under [the Unlicense](LICENSE). Do whatever you like with it.
+
+The bundled DejaVu Sans font (`src/picolay/DejaVuSans.ttf`) keeps its own permissive [DejaVu Fonts license](https://dejavu-fonts.github.io/License.html).
