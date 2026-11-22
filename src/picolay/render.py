@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from PIL import Image, ImageDraw
 
-from .fonts import load_font
 from .layout import LayoutBox, compute_layout
 from .nodes import Box, Img, Text
 from .style import Style
+from .text import font_for, line_pitch, text_width
 
 Node = Box | Text | Img
 
@@ -15,23 +15,25 @@ def render(
     width: int,
     height: int,
     background: tuple[int, int, int] | None = (255, 255, 255),
+    antialias: bool = True,
 ) -> Image.Image:
     """Render a node tree to a Pillow Image of the given dimensions.
 
-    Pass background=None for a transparent RGBA canvas.
+    Pass background=None for a transparent RGBA canvas. Pass antialias=False to draw
+    text with hard pixel edges, as Pillow does on a 1-bit canvas (for 1-bit displays).
     """
     layout = compute_layout(node, float(width), float(height))
     if background is None:
         canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     else:
         canvas = Image.new("RGBA", (width, height), background + (255,))
-    _draw_layout(canvas, layout, 0, 0)
+    _draw_layout(canvas, layout, 0, 0, antialias)
     if background is None:
         return canvas
     return canvas.convert("RGB")
 
 
-def _draw_layout(canvas: Image.Image, lb: LayoutBox, offset_x: float, offset_y: float):
+def _draw_layout(canvas: Image.Image, lb: LayoutBox, offset_x: float, offset_y: float, antialias: bool = True):
     """Recursively draw a LayoutBox tree onto the canvas."""
     x = offset_x + lb.x
     y = offset_y + lb.y
@@ -47,7 +49,7 @@ def _draw_layout(canvas: Image.Image, lb: LayoutBox, offset_x: float, offset_y: 
             # Render children to a temp image and paste clipped
             temp = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
             for child_lb in lb.children:
-                _draw_layout(temp, child_lb, x, y)
+                _draw_layout(temp, child_lb, x, y, antialias)
             # Clip to box bounds
             ix, iy = int(x), int(y)
             iw, ih = int(w), int(h)
@@ -61,10 +63,10 @@ def _draw_layout(canvas: Image.Image, lb: LayoutBox, offset_x: float, offset_y: 
                 canvas.paste(region, (cx1, cy1), region)
         else:
             for child_lb in lb.children:
-                _draw_layout(canvas, child_lb, x, y)
+                _draw_layout(canvas, child_lb, x, y, antialias)
 
     elif isinstance(node, Text):
-        _draw_text(canvas, lb, x, y, w, h)
+        _draw_text(canvas, lb, x, y, w, h, antialias)
 
     elif isinstance(node, Img):
         _draw_img(canvas, node, x, y, w, h)
@@ -96,7 +98,14 @@ def _draw_box(canvas: Image.Image, node: Box, x: float, y: float, w: float, h: f
         draw.rectangle([ix + iw - bw, iy, ix + iw - 1, iy + ih - 1], fill=bc)
 
 
-def _draw_text(canvas: Image.Image, lb: LayoutBox, x: float, y: float, w: float, h: float):
+def _new_draw(image: Image.Image, antialias: bool) -> ImageDraw.ImageDraw:
+    draw = ImageDraw.Draw(image)
+    if not antialias:
+        draw.fontmode = "1"
+    return draw
+
+
+def _draw_text(canvas: Image.Image, lb: LayoutBox, x: float, y: float, w: float, h: float, antialias: bool = True):
     """Draw text content."""
     node = lb.node
     if not node.content:
@@ -104,8 +113,13 @@ def _draw_text(canvas: Image.Image, lb: LayoutBox, x: float, y: float, w: float,
 
     s = node.style
     font_size = lb.resolved_font_size or s.font_size
-    font = load_font(size=font_size)
-    draw = ImageDraw.Draw(canvas)
+    font = font_for(s, font_size)
+
+    if lb.lines is not None:
+        _draw_wrapped(canvas, lb, font, font_size, x, y, w, h, antialias)
+        return
+
+    draw = _new_draw(canvas, antialias)
 
     bbox = font.getbbox(node.content)
     text_w = bbox[2] - bbox[0]
@@ -138,7 +152,7 @@ def _draw_text(canvas: Image.Image, lb: LayoutBox, x: float, y: float, w: float,
     else:
         # Slow path: draw to temp, clip to content area
         temp = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
-        temp_draw = ImageDraw.Draw(temp)
+        temp_draw = _new_draw(temp, antialias)
         temp_draw.text((int(tx), int(ty)), node.content, fill=s.font_color + (255,), font=font)
         icx, icy = int(cx), int(cy)
         icw, ich = int(cw), int(ch)
@@ -147,6 +161,33 @@ def _draw_text(canvas: Image.Image, lb: LayoutBox, x: float, y: float, w: float,
         if cx2 > icx and cy2 > icy:
             region = temp.crop((icx, icy, cx2, cy2))
             canvas.paste(region, (icx, icy), region)
+
+
+def _draw_wrapped(canvas, lb: LayoutBox, font, font_size: int, x: float, y: float, w: float, h: float, antialias: bool):
+    """Draw wrapped lines from the top of the content box, clipped to it."""
+    s = lb.node.style
+    cx = x + s.padding_left + s.border_width
+    cy = y + s.padding_top + s.border_width
+    cw = max(0, w - s.h_padding - s.h_border)
+    ch = max(0, h - s.v_padding - s.v_border)
+    pitch = line_pitch(s, font_size)
+
+    temp = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    draw = _new_draw(temp, antialias)
+    for i, line in enumerate(lb.lines):
+        if s.text_align == "center":
+            tx = cx + (cw - text_width(font, line)) / 2
+        elif s.text_align == "right":
+            tx = cx + cw - text_width(font, line)
+        else:
+            tx = cx
+        draw.text((int(tx), int(cy + i * pitch)), line, fill=s.font_color + (255,), font=font)
+    icx, icy = int(cx), int(cy)
+    cx2 = min(canvas.width, icx + int(cw))
+    cy2 = min(canvas.height, icy + int(ch))
+    if cx2 > icx and cy2 > icy:
+        region = temp.crop((icx, icy, cx2, cy2))
+        canvas.paste(region, (icx, icy), region)
 
 
 def _draw_img(canvas: Image.Image, node: Img, x: float, y: float, w: float, h: float):
@@ -183,6 +224,14 @@ def _draw_img(canvas: Image.Image, node: Img, x: float, y: float, w: float, h: f
         crop_y = (new_h - ich) // 2
         cropped = scaled.crop((crop_x, crop_y, crop_x + icw, crop_y + ich))
         _paste_img(canvas, cropped, int(cx), int(cy))
+    elif s.object_fit == "none":
+        # Natural size, centered, never resampled (clipped if larger than the box)
+        left = (src_w - icw) // 2 if src_w > icw else 0
+        top = (src_h - ich) // 2 if src_h > ich else 0
+        region = img.crop((left, top, left + min(src_w, icw), top + min(src_h, ich)))
+        paste_x = int(cx + max(0, (icw - region.width) / 2))
+        paste_y = int(cy + max(0, (ich - region.height) / 2))
+        _paste_img(canvas, region, paste_x, paste_y)
     else:  # contain
         scale = min(icw / src_w, ich / src_h) if src_w > 0 and src_h > 0 else 1
         new_w = int(src_w * scale)

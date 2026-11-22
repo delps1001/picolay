@@ -29,10 +29,15 @@ def _normalize_border(value) -> tuple[int, tuple[int, int, int]]:
     raise ValueError(f"Invalid border value: {value!r}. Use (width, (r, g, b)).")
 
 
+FIT = "fit"  # width/height value: size a Box to its children
+
+
 @dataclass(frozen=True)
 class Style:
-    width: Optional[float] = None
-    height: Optional[float] = None
+    # Pixels, a float in (0, 1.0] for a fraction of the parent, or "fit" (Box only:
+    # shrink-wrap to the children instead of filling the available space).
+    width: Optional[float | str] = None
+    height: Optional[float | str] = None
     min_width: Optional[int] = None
     min_height: Optional[int] = None
     max_width: Optional[float] = None
@@ -46,17 +51,28 @@ class Style:
 
     flex_direction: str = "row"
     justify_content: str = "start"
+    # "start", "center", "end", "stretch", or "baseline" (rows only: line up the
+    # text baselines of the children, like CSS align-items: baseline)
     align_items: str = "start"
     gap: int = 0
     flex_grow: float = 0.0
 
+    # "contain", "cover", "fill", or "none" (natural size, centered, never resampled)
     object_fit: str = "contain"
     image_rendering: str = "auto"  # "auto" (LANCZOS) or "pixelated" (NEAREST)
 
     font_size: int = 16
+    font_path: Optional[str] = None  # TrueType/OpenType file; None = bundled DejaVu Sans
     font_color: tuple[int, int, int] = (0, 0, 0)
     text_align: str = "left"
+    # Shrink the font until the text fits: the width for single-line text, and both
+    # width and height for wrapped text. Never goes below min_font_size.
     font_shrink: bool = False
+    min_font_size: int = 1
+    # Wrap text onto multiple lines at word boundaries (hyphenating words that are
+    # too long for a line). Lines are font_size + line_spacing pixels apart.
+    wrap: bool = False
+    line_spacing: int = 4
 
     overflow: str = "visible"
 

@@ -11,7 +11,7 @@ The only dependency is Pillow. DejaVu Sans is bundled as the default font.
 ## Install
 
 ```bash
-pip install "picolay @ git+https://github.com/delps1001/picolay@v0.1.1"
+pip install "picolay @ git+https://github.com/delps1001/picolay@v0.2.0"
 ```
 
 ## Example
@@ -36,11 +36,47 @@ overlay = render(card, 200, 300, background=None)  # transparent RGBA
 
 ## Building blocks
 
-- `Box(style, children)`: a flex container.
-- `Text(content, style=...)`: wrapped text. `font_shrink=True` shrinks the font to fit.
+- `Box(style, children)`: a flex container. By default it fills the space it's given; `width="fit"` / `height="fit"` shrink-wraps it to its children instead.
+- `Text(content, style=...)`: a single line of text, or wrapped lines with `wrap=True`.
 - `Img(src, style=...)`: a PIL image, or a path to one.
-- `Style(...)`: `width`/`height` (pixels, or a float between 0 and 1.0 for a fraction of the parent), `min_*`/`max_*`, `padding`, `margin`, `border`, `background`, `flex_direction`, `justify_content`, `align_items`, `gap`, `flex_grow`, `object_fit`, `image_rendering`, `font_size`, `font_color`, `text_align`, `font_shrink`, `overflow`.
+- `render(node, width, height, background=..., antialias=True)`: draws the tree. Pass `antialias=False` for hard-edged text on 1-bit displays.
 - `compute_layout(node, width, height)`: the layout tree without rendering, handy for tests.
+
+### Style
+
+| Group | Properties |
+|---|---|
+| Size | `width`, `height` (pixels, a float between 0 and 1.0 for a fraction of the parent, or `"fit"` on a Box), `min_*`, `max_*` |
+| Box model | `padding`, `margin`, `border`, `background`, `overflow` |
+| Flex | `flex_direction`, `justify_content`, `align_items` (`start`, `center`, `end`, `stretch`, or `baseline` to line up text in a row), `gap`, `flex_grow` |
+| Images | `object_fit` (`contain`, `cover`, `fill`, or `none` to place a pre-processed image at its natural size), `image_rendering` |
+| Text | `font_size`, `font_path`, `font_color`, `text_align`, `wrap`, `line_spacing`, `font_shrink`, `min_font_size` |
+
+`font_shrink` steps the font down until the text fits: the width for a single line, and both width and height for wrapped text. It never goes below `min_font_size`, and it never truncates.
+
+## Example: wrapped, baseline-aligned text
+
+```python
+from picolay import Box, Style, Text, render
+
+card = Box(
+    style=Style(width=400, height=240, padding=16, flex_direction="column", gap=8),
+    children=[
+        Box(
+            style=Style(height="fit", align_items="baseline", gap=10),
+            children=[
+                Text("#006", style=Style(font_size=24, font_color=(100, 100, 100))),
+                Text("Charizard", style=Style(font_size=40, font_path="/path/to/DejaVuSans-Bold.ttf")),
+            ],
+        ),
+        Text(
+            "Spits fire that is hot enough to melt boulders. Known to cause forest fires unintentionally.",
+            style=Style(wrap=True, font_shrink=True, font_size=22, min_font_size=10, flex_grow=1),
+        ),
+    ],
+)
+image = render(card, 400, 240)
+```
 
 ## Development
 
