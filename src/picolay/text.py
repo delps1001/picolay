@@ -1,6 +1,9 @@
 """Text measurement, wrapping and shrink-to-fit, shared by layout and rendering."""
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
+
 from PIL import ImageFont
 
 from .fonts import load_font
@@ -11,8 +14,27 @@ def font_for(style: Style, size: int | None = None) -> ImageFont.FreeTypeFont:
     return load_font(style.font_path, size or style.font_size)
 
 
+# Pillow text mode to measure in: "" (anti-aliased) or "1" (hard-edged). Glyphs are hinted
+# differently in the two, so text has to be measured the way it will be drawn.
+_text_mode: ContextVar[str] = ContextVar("picolay_text_mode", default="")
+
+
+@contextmanager
+def measuring(antialias: bool):
+    """Measure text as it is drawn with (or without) anti-aliasing, within this block."""
+    token = _text_mode.set("" if antialias else "1")
+    try:
+        yield
+    finally:
+        _text_mode.reset(token)
+
+
+def text_bbox(font: ImageFont.FreeTypeFont, text: str) -> tuple[float, float, float, float]:
+    return font.getbbox(text, mode=_text_mode.get())
+
+
 def text_width(font: ImageFont.FreeTypeFont, text: str) -> float:
-    bbox = font.getbbox(text)
+    bbox = text_bbox(font, text)
     return bbox[2] - bbox[0]
 
 

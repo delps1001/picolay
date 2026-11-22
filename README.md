@@ -11,7 +11,7 @@ The only dependency is Pillow. DejaVu Sans is bundled as the default font.
 ## Install
 
 ```bash
-pip install "picolay @ git+https://github.com/delps1001/picolay@v0.2.0"
+pip install "picolay @ git+https://github.com/delps1001/picolay@v0.2.1"
 ```
 
 ## Example
@@ -40,7 +40,7 @@ overlay = render(card, 200, 300, background=None)  # transparent RGBA
 - `Text(content, style=...)`: a single line of text, or wrapped lines with `wrap=True`.
 - `Img(src, style=...)`: a PIL image, or a path to one.
 - `render(node, width, height, background=..., antialias=True)`: draws the tree. Pass `antialias=False` for hard-edged text on 1-bit displays.
-- `compute_layout(node, width, height)`: the layout tree without rendering, handy for tests.
+- `compute_layout(node, width, height, antialias=True)`: the layout tree without rendering, handy for tests. Pass the same `antialias` you render with, since hard-edged text measures slightly differently.
 
 ### Style
 

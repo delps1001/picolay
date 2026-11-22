@@ -191,3 +191,29 @@ def test_antialias_false_draws_only_pure_colors():
     colors = set(render(root, 300, 200, antialias=False).getdata())
     assert colors == {(0, 0, 0), (255, 255, 255)}
     assert len(set(render(root, 300, 200).getdata())) > 2  # antialiased by default
+
+
+def test_hard_edged_text_is_measured_as_it_is_drawn():
+    """Hard-edged glyphs are hinted wider or narrower than smooth ones, so wrapping has to
+    measure in the same mode; otherwise lines overflow their box and get clipped."""
+    from PIL import ImageFont
+
+    from picolay.fonts import _BUNDLED_FONT
+
+    content = ("SHEDINJA's hard body doesn't move - not even a twitch. In fact, its body appears "
+               "to be merely a hollow shell. It is believed that this POKeMON will steal the spirit "
+               "of anyone peering into its hollow body from its back.")
+    font = ImageFont.truetype(_BUNDLED_FONT, 12)
+
+    def drawn_width(line):
+        bbox = font.getbbox(line, mode="1")
+        return bbox[2] - bbox[0]
+
+    def widest_line(width, antialias):
+        lb = compute_layout(Text(content, style=Style(wrap=True, font_size=12)), width, 400, antialias=antialias)
+        return max(drawn_width(line) for line in lb.lines)
+
+    widths = range(200, 320)
+    assert all(widest_line(w, antialias=False) <= w for w in widths)
+    # Laid out for smooth text, the same lines would not all fit when drawn hard-edged
+    assert any(widest_line(w, antialias=True) > w for w in widths)

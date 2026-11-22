@@ -5,7 +5,7 @@ from PIL import Image, ImageDraw
 from .layout import LayoutBox, compute_layout
 from .nodes import Box, Img, Text
 from .style import Style
-from .text import font_for, line_pitch, text_width
+from .text import font_for, line_pitch, measuring, text_bbox, text_width
 
 Node = Box | Text | Img
 
@@ -22,12 +22,13 @@ def render(
     Pass background=None for a transparent RGBA canvas. Pass antialias=False to draw
     text with hard pixel edges, as Pillow does on a 1-bit canvas (for 1-bit displays).
     """
-    layout = compute_layout(node, float(width), float(height))
+    layout = compute_layout(node, float(width), float(height), antialias=antialias)
     if background is None:
         canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     else:
         canvas = Image.new("RGBA", (width, height), background + (255,))
-    _draw_layout(canvas, layout, 0, 0, antialias)
+    with measuring(antialias):
+        _draw_layout(canvas, layout, 0, 0, antialias)
     if background is None:
         return canvas
     return canvas.convert("RGB")
@@ -121,7 +122,7 @@ def _draw_text(canvas: Image.Image, lb: LayoutBox, x: float, y: float, w: float,
 
     draw = _new_draw(canvas, antialias)
 
-    bbox = font.getbbox(node.content)
+    bbox = text_bbox(font, node.content)
     text_w = bbox[2] - bbox[0]
     text_h = bbox[3] - bbox[1]
 

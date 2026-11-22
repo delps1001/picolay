@@ -5,7 +5,7 @@ from typing import Union
 
 from .nodes import Box, Img, Text
 from .style import FIT, Style
-from .text import fit_wrapped, font_for, wrapped_height
+from .text import fit_wrapped, font_for, measuring, text_bbox, wrapped_height
 
 Node = Union[Box, Text, Img]
 
@@ -47,7 +47,7 @@ def _text_intrinsic_size(node: Text, font_size: int | None = None) -> tuple[floa
     if not node.content:
         return (0, 0)
     font = font_for(node.style, font_size or node.style.font_size)
-    bbox = font.getbbox(node.content)
+    bbox = text_bbox(font, node.content)
     w = bbox[2] - bbox[0]
     h = bbox[3] - bbox[1]
     return (w, h)
@@ -61,9 +61,14 @@ def _img_intrinsic_size(node: Img) -> tuple[float, float]:
     return (float(img.width), float(img.height))
 
 
-def compute_layout(node: Node, available_w: float, available_h: float) -> LayoutBox:
-    """Compute layout for the full node tree, starting at (0, 0)."""
-    return _layout_node(node, available_w, available_h, parent_is_row=True, has_flex_grow=False)
+def compute_layout(node: Node, available_w: float, available_h: float, antialias: bool = True) -> LayoutBox:
+    """Compute layout for the full node tree, starting at (0, 0).
+
+    Pass antialias=False if the tree will be rendered that way: hard-edged text has
+    slightly different widths, which changes where it wraps and how far it shrinks.
+    """
+    with measuring(antialias):
+        return _layout_node(node, available_w, available_h, parent_is_row=True, has_flex_grow=False)
 
 
 def _clamp(s: Style, w: float, h: float, available_w: float, available_h: float) -> tuple[float, float]:
@@ -101,7 +106,7 @@ def baseline_of(lb: LayoutBox) -> float | None:
         top = s.padding_top + s.border_width
         if s.wrap:
             return top + ascent  # lines are drawn from the top of the content box
-        bbox = font.getbbox(node.content)
+        bbox = text_bbox(font, node.content)
         ch = max(0, lb.height - s.v_padding - s.v_border)
         # Mirrors render._draw_text: glyph box centered vertically, origin shifted by bbox[1]
         return top + (ch - (bbox[3] - bbox[1])) / 2 - bbox[1] + ascent
